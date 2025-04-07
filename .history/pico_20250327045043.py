@@ -1,7 +1,5 @@
 # starter code by matus & o1-pro
 import argparse
-from pydoc import describe
-from this import d
 import time
 import random
 import math
@@ -163,17 +161,8 @@ class KGramMLPSeqModel(nn.Module):
         self.chunk_size = chunk_size
 
         # fill in
-        layers = []
-        layers.append(nn.Linear(k * vocab_size, embed_size))
-        layers.append(nn.SiLU())
 
-        for _ in range(num_inner_layers):
-            layers.append(nn.Linear(embed_size, embed_size))
-            layers.append(nn.SiLU())
-
-        layers.append(nn.Linear(embed_size, vocab_size))
-
-        self.net = nn.Sequential(*layers)
+        self.net = None
 
     def forward(self, tokens_seq):
         """
@@ -212,6 +201,7 @@ class KGramMLPSeqModel(nn.Module):
 
         outputs = torch.cat(outputs, dim=0)  # (seq_len, batch, vocab_size)
         return outputs
+
 
 ################################################################################
 # 4. LSTM-based seq2seq
@@ -258,88 +248,7 @@ class TransformerModel(nn.Module):
     def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4):
         super().__init__()
 
-        self.embedding = nn.Embedding(vocab_size, d_model)
-
-        self.blocks = nn.ModuleList([
-            TransformerBlock(d_model, n_heads) for _ in range(n_blocks)
-        ])
-
-        self.unembed = nn.Linear(d_model, vocab_size)
-
-    def forward(self, tokens_seq):
-        # tokens_seq: [seq_len, batch_size]
-        x = self.embedding(tokens_seq)  # (seq_len, batch, d_model)
-        for block in self.blocks:
-            x = block(x)  # (seq_len, batch, d_model)
-        logits = self.unembed(x)  # (seq_len, batch, vocab_size)
-
-        return logits
-
-# decoder block: https://medium.com/@varunsivamani/decoder-block-in-transformer-98dc862c052a
-class TransformerBlock(nn.Module):
-    def __init__(self, d_model, n_heads):
-        super().__init__()
-
-        self.attention = MultiHeadAttention(d_model, n_heads)
-        self.ffn = nn.Sequential(
-            nn.Linear(d_model, 4 * d_model),
-            nn.SiLU(),
-            nn.Linear(4 * d_model, d_model),
-        )
-
-        self.norm1 = RMSNorm(d_model)
-        self.norm2 = RMSNorm(d_model)
-
-    def forward(self, x):
-        # x: [seq_len, batch_size, d_model]
-        x = self.norm1(x + self.attention(x))
-        x = self.norm2(x + self.ffn(x))
-        return x
-
-class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model, n_heads):
-        super().__init__()
-        self.d_model = d_model
-        self.n_heads = n_heads
-
-        assert d_model % n_heads == 0
-        self.d_head = d_model // n_heads
-
-        self.q = nn.Linear(d_model, d_model)
-        self.k = nn.Linear(d_model, d_model)
-        self.v = nn.Linear(d_model, d_model)
-        self.out = nn.Linear(d_model, d_model)
-
-    def forward(self, x):
-        # x: [seq_len, batch_size, d_model]
-        q = self.q(x)  # [seq_len, batch_size, d_model]
-        k = self.k(x)  # [seq_len, batch_size, d_model]
-        v = self.v(x)  # [seq_len, batch_size, d_model]
-        
-        q = q.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        k = k.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        v = v.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        q = q.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        k = k.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        v = v.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-
-        # qkv computation
-        scores = q @ k.transpose(-2, -1) # [seq_len, n_heads, batch_size, batch_size]
-        scores = scores / math.sqrt(self.d_head) # [seq_len, n_heads, batch_size, batch_size]
-
-        # add mask to scores
-        mask = torch.one_hot(torch.arange(seq_len), device=x.device) # [seq_len, seq_len]
-        mask = mask.unsqueeze(0).unsqueeze(1) # [1, 1, seq_len, seq_len]
-        mask = mask.expand(seq_len, self.n_heads, seq_len, seq_len) # [seq_len, n_heads, seq_len, seq_len]
-        scores = scores.masked_fill(mask == 0, float('-inf')) 
-        
-        weights = F.softmax(scores, dim=-1) # [seq_len, n_heads, batch_size, batch_size]
-        output = weights @ v # [seq_len, n_heads, batch_size, d_head]
-
-        output = output.transpose(1, 2) # [seq_len, batch_size, n_heads, d_head]
-        output = output.reshape(seq_len, batch_size, n_heads * d_head) # [seq_len, batch_size, d_model]
-        output = self.out(output) # [seq_len, batch_size, d_model]
-        return output
+        pass
 
 
 ################################################################################
@@ -356,21 +265,7 @@ def monosemantic_analysis_for_token(token_id, model, enc, device="cpu", top_n=5)
 ################################################################################
 
 def nucleus_sampling(logits, p=0.95):
-    probs = F.softmax(logits, dim=-1) # [vocab_size,]
-    sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-    cutoff_idx = torch.where(cumulative_probs >= p)[0].item() + 1
-
-    mask = torch.zeros_like(probs, dtype=torch.bool)
-    mask[sorted_indices[:cutoff_idx]] = True
-
-    masked_probs = probs.clone()
-    masked_probs[~mask] = 0.0
-    masked_probs /= masked_probs.sum()
-    
-    sample_idx = torch.multinomial(masked_probs, 1)
-
-    return sample_idx.item()
+    return torch.argmax(logits).item()
 
 
 def generate_text(model, enc, init_text, max_new_tokens=20, device="cpu",

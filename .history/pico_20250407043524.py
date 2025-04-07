@@ -275,7 +275,7 @@ class TransformerModel(nn.Module):
 
         return logits
 
-# decoder block: https://medium.com/@varunsivamani/decoder-block-in-transformer-98dc862c052a
+# decoder block
 class TransformerBlock(nn.Module):
     def __init__(self, d_model, n_heads):
         super().__init__()

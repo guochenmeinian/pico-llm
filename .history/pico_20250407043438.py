@@ -275,7 +275,7 @@ class TransformerModel(nn.Module):
 
         return logits
 
-# decoder block: https://medium.com/@varunsivamani/decoder-block-in-transformer-98dc862c052a
+# decoder block
 class TransformerBlock(nn.Module):
     def __init__(self, d_model, n_heads):
         super().__init__()
@@ -336,10 +336,7 @@ class MultiHeadAttention(nn.Module):
         weights = F.softmax(scores, dim=-1) # [seq_len, n_heads, batch_size, batch_size]
         output = weights @ v # [seq_len, n_heads, batch_size, d_head]
 
-        output = output.transpose(1, 2) # [seq_len, batch_size, n_heads, d_head]
-        output = output.reshape(seq_len, batch_size, n_heads * d_head) # [seq_len, batch_size, d_model]
-        output = self.out(output) # [seq_len, batch_size, d_model]
-        return output
+        output = output.transpose(1, 2)
 
 
 ################################################################################

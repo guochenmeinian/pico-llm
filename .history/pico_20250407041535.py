@@ -1,7 +1,6 @@
 # starter code by matus & o1-pro
 import argparse
 from pydoc import describe
-from this import d
 import time
 import random
 import math
@@ -275,7 +274,7 @@ class TransformerModel(nn.Module):
 
         return logits
 
-# decoder block: https://medium.com/@varunsivamani/decoder-block-in-transformer-98dc862c052a
+# decoder block
 class TransformerBlock(nn.Module):
     def __init__(self, d_model, n_heads):
         super().__init__()
@@ -302,9 +301,6 @@ class MultiHeadAttention(nn.Module):
         self.d_model = d_model
         self.n_heads = n_heads
 
-        assert d_model % n_heads == 0
-        self.d_head = d_model // n_heads
-
         self.q = nn.Linear(d_model, d_model)
         self.k = nn.Linear(d_model, d_model)
         self.v = nn.Linear(d_model, d_model)
@@ -316,31 +312,7 @@ class MultiHeadAttention(nn.Module):
         k = self.k(x)  # [seq_len, batch_size, d_model]
         v = self.v(x)  # [seq_len, batch_size, d_model]
         
-        q = q.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        k = k.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        v = v.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        q = q.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        k = k.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        v = v.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-
-        # qkv computation
-        scores = q @ k.transpose(-2, -1) # [seq_len, n_heads, batch_size, batch_size]
-        scores = scores / math.sqrt(self.d_head) # [seq_len, n_heads, batch_size, batch_size]
-
-        # add mask to scores
-        mask = torch.one_hot(torch.arange(seq_len), device=x.device) # [seq_len, seq_len]
-        mask = mask.unsqueeze(0).unsqueeze(1) # [1, 1, seq_len, seq_len]
-        mask = mask.expand(seq_len, self.n_heads, seq_len, seq_len) # [seq_len, n_heads, seq_len, seq_len]
-        scores = scores.masked_fill(mask == 0, float('-inf')) 
-        
-        weights = F.softmax(scores, dim=-1) # [seq_len, n_heads, batch_size, batch_size]
-        output = weights @ v # [seq_len, n_heads, batch_size, d_head]
-
-        output = output.transpose(1, 2) # [seq_len, batch_size, n_heads, d_head]
-        output = output.reshape(seq_len, batch_size, n_heads * d_head) # [seq_len, batch_size, d_model]
-        output = self.out(output) # [seq_len, batch_size, d_model]
-        return output
-
+        q = q.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads)
 
 ################################################################################
 # 6. K-Means Monosemantic (DISABLED by default)
