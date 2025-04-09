@@ -312,33 +312,32 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x):
         # x: [seq_len, batch_size, d_model]
+        seq_len, batch_size, _ = x.shape
+        
         q = self.q(x)  # [seq_len, batch_size, d_model]
         k = self.k(x)  # [seq_len, batch_size, d_model]
         v = self.v(x)  # [seq_len, batch_size, d_model]
         
-        q = q.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        k = k.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        v = v.view(seq_len, batch_size, self.n_heads, self.d_model // self.n_heads) # [seq_len, batch_size, n_heads, d_head]
-        q = q.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        k = k.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
-        v = v.transpose(1, 2) # [seq_len, n_heads, batch_size, d_head]
+        # [[seq, batch, heads, d_head]] -> [batch, heads, seq, d_head]
+        q = q.view(seq_len, batch_size, self.n_heads, self.d_head).permute(1, 2, 0, 3).contiguous()
+        k = k.view(seq_len, batch_size, self.n_heads, self.d_head).permute(1, 2, 0, 3).contiguous()
+        v = v.view(seq_len, batch_size, self.n_heads, self.d_head).permute(1, 2, 0, 3).contiguous()         
 
-        # qkv computation
-        scores = q @ k.transpose(-2, -1) # [seq_len, n_heads, batch_size, batch_size]
-        scores = scores / math.sqrt(self.d_head) # [seq_len, n_heads, batch_size, batch_size]
+        # 注意力分数计算
+        scores = q @ k.transpose(-2, -1)  # [batch_size, n_heads, seq_len, seq_len]
+        scores = scores / math.sqrt(self.d_head)  # [batch_size, n_heads, seq_len, seq_len]
 
         # add mask to scores
-        mask = torch.one_hot(torch.arange(seq_len), device=x.device) # [seq_len, seq_len]
-        mask = mask.unsqueeze(0).unsqueeze(1) # [1, 1, seq_len, seq_len]
-        mask = mask.expand(seq_len, self.n_heads, seq_len, seq_len) # [seq_len, n_heads, seq_len, seq_len]
-        scores = scores.masked_fill(mask == 0, float('-inf')) 
+        mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device), diagonal=1).bool()  # [seq_len, seq_len]
+        mask = mask.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
+        scores = scores.masked_fill(mask, float('-inf'))  # [batch_size, n_heads, seq_len, seq_len]
         
-        weights = F.softmax(scores, dim=-1) # [seq_len, n_heads, batch_size, batch_size]
-        output = weights @ v # [seq_len, n_heads, batch_size, d_head]
+        weights = F.softmax(scores, dim=-1)  # [batch_size, n_heads, seq_len, seq_len]
+        output = weights @ v  # [batch_size, n_heads, seq_len, d_head]
 
-        output = output.transpose(1, 2) # [seq_len, batch_size, n_heads, d_head]
-        output = output.reshape(seq_len, batch_size, n_heads * d_head) # [seq_len, batch_size, d_model]
-        output = self.out(output) # [seq_len, batch_size, d_model]
+        output = output.permute(2, 0, 1, 3).contiguous()  # [seq_len, batch_size, n_heads, d_head]
+        output = output.view(seq_len, batch_size, self.d_model)  # [seq_len, batch_size, d_model]
+        output = self.out(output)  # [seq_len, batch_size, d_model]
         return output
 
 
@@ -359,7 +358,7 @@ def nucleus_sampling(logits, p=0.95):
     probs = F.softmax(logits, dim=-1) # [vocab_size,]
     sorted_probs, sorted_indices = torch.sort(probs, descending=True)
     cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-    cutoff_idx = torch.where(cumulative_probs >= p)[0].item() + 1
+    cutoff_idx = torch.where(cumulative_probs >= p)[0][0].item() + 1
 
     mask = torch.zeros_like(probs, dtype=torch.bool)
     mask[sorted_indices[:cutoff_idx]] = True
