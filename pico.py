@@ -358,7 +358,13 @@ def nucleus_sampling(logits, p=0.95):
     probs = F.softmax(logits, dim=-1) # [vocab_size,]
     sorted_probs, sorted_indices = torch.sort(probs, descending=True)
     cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-    cutoff_idx = torch.where(cumulative_probs >= p)[0][0].item() + 1
+    
+    indices = torch.where(cumulative_probs >= p)[0]
+    if indices.numel() == 0:
+        cutoff_idx = len(cumulative_probs)
+    else:
+        cutoff_idx = indices[0].item() + 1
+
 
     mask = torch.zeros_like(probs, dtype=torch.bool)
     mask[sorted_indices[:cutoff_idx]] = True
@@ -642,12 +648,14 @@ def main():
         hidden_size=embed_size
     ).to(device)
 
-    transformer = TransformerModel(
-    ).to(device)
+    transformer = TransformerModel().to(device)
+
+    kv_transformer = TransformerModel().to(device)
 
     models = {
       # "kgram_mlp_seq": kgram_model,
-        "lstm_seq": lstm_model,
+      # "lstm_seq": lstm_model,
+        "transformer": transformer,
       # "kvcache_transformer": kv_transformer,
     }
 
