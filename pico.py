@@ -323,7 +323,7 @@ class MultiHeadAttention(nn.Module):
         k = k.view(seq_len, batch_size, self.n_heads, self.d_head).permute(1, 2, 0, 3).contiguous()
         v = v.view(seq_len, batch_size, self.n_heads, self.d_head).permute(1, 2, 0, 3).contiguous()         
 
-        # 注意力分数计算
+        # attention calculation
         scores = q @ k.transpose(-2, -1)  # [batch_size, n_heads, seq_len, seq_len]
         scores = scores / math.sqrt(self.d_head)  # [batch_size, n_heads, seq_len, seq_len]
 
@@ -655,7 +655,7 @@ def main():
     models = {
       # "kgram_mlp_seq": kgram_model,
       # "lstm_seq": lstm_model,
-        "transformer": transformer,
+      # "transformer": transformer,
       # "kvcache_transformer": kv_transformer,
     }
 
