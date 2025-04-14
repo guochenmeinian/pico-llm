@@ -365,7 +365,6 @@ def nucleus_sampling(logits, p=0.95):
     else:
         cutoff_idx = indices[0].item() + 1
 
-
     mask = torch.zeros_like(probs, dtype=torch.bool)
     mask[sorted_indices[:cutoff_idx]] = True
 
